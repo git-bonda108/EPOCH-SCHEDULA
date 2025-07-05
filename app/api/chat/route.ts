@@ -2,9 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/lib/db'
 
 // Current system date - FIXED: Today is July 5, 2025 (Saturday)
 const CURRENT_DATE = new Date('2025-07-05T12:00:00')
@@ -291,6 +289,7 @@ function extractInformationFromMessage(message: string): ExtractedInfo {
     confidence
   }
 }
+
 // SIMPLIFIED SMART DEFAULTS FOR WORKING CREATE OPERATIONS
 async function applySmartDefaults(extracted: ExtractedInfo): Promise<{
   startTime?: Date
@@ -714,26 +713,21 @@ function generateBookingsTable(bookings: any[], dateRange?: string): string {
     
     table += `
       <tr style="background: ${rowBg}; border-bottom: 1px solid #e2e8f0; transition: all 0.2s ease;">
-        <td style="padding: 14px; font-weight: 600; color: #1f2937; font-size: 14px;">${booking.title}</td>
-        <td style="padding: 14px; ${dateStyle} font-size: 13px;">${startTime.toLocaleDateString('en-US', { 
+        <td style="padding: 14px; font-weight: 600; color: #2d3748;">${booking.title}</td>
+        <td style="padding: 14px; ${dateStyle}">${startTime.toLocaleDateString('en-US', { 
           weekday: 'short', 
           month: 'short', 
-          day: 'numeric',
-          year: 'numeric'
+          day: 'numeric' 
         })}</td>
-        <td style="padding: 14px; color: #374151; font-family: 'SF Mono', monospace; font-size: 13px; font-weight: 500;">${startTime.toLocaleTimeString('en-US', { 
-          hour: 'numeric', 
-          minute: '2-digit', 
-          hour12: true 
-        })} - ${endTime.toLocaleTimeString('en-US', { 
+        <td style="padding: 14px; color: #4a5568; font-family: monospace;">${startTime.toLocaleTimeString('en-US', { 
           hour: 'numeric', 
           minute: '2-digit', 
           hour12: true 
         })}</td>
-        <td style="padding: 14px; color: #4a5568; font-weight: 500; font-size: 13px;">${duration}h</td>
-        <td style="padding: 14px; color: #4a5568; font-size: 13px;">${booking.clientName || 'Not specified'}</td>
+        <td style="padding: 14px; color: #4a5568;">${duration}h</td>
+        <td style="padding: 14px; color: #4a5568;">${booking.clientName || 'N/A'}</td>
         <td style="padding: 14px;">
-          <span style="background: ${categoryColor.bg}; color: ${categoryColor.text}; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+          <span style="background: ${categoryColor.bg}; color: ${categoryColor.text}; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;">
             ${booking.category || 'General'}
           </span>
         </td>
@@ -743,296 +737,229 @@ function generateBookingsTable(bookings: any[], dateRange?: string): string {
   table += `
         </tbody>
       </table>
-      <div style="margin-top: 12px; padding: 12px; background: #f1f5f9; border-radius: 8px; font-size: 12px; color: #64748b;">
-        📊 Total Sessions: <strong>${bookings.length}</strong> | 
-        🟢 Today | 🔵 Future | ⚫ Past
-      </div>
     </div>`
-  
+
   return table
 }
 
-export async function POST(request: NextRequest) {
+// MAIN CHAT HANDLER
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    console.log('🚀 ============= SIMPLIFIED CHAT API START =============')
     const { message } = await request.json()
-    console.log('📩 RECEIVED MESSAGE:', message)
+    console.log('🔶 =============== CHAT API REQUEST ===============')
+    console.log('📥 RECEIVED MESSAGE:', message)
 
-    if (!message || typeof message !== 'string') {
-      return NextResponse.json(
-        { message: 'Message is required' },
-        { status: 400 }
-      )
-    }
-
-    // STEP 1: Extract information from message
+    // Extract information from the message
     const extracted = extractInformationFromMessage(message)
-    console.log('📊 EXTRACTED INFO:', extracted)
+    console.log('🔍 EXTRACTED INFO:', extracted)
 
-    let response = "Hello! I'm Schedula, your intelligent scheduling assistant. I can help you book training sessions and view your calendar."
-    let suggestions = [
-      "Book a training session tomorrow at 2 PM",
-      "Show me my calendar for July 12",
-      "Schedule a meeting for today at 10 AM",
-      "What sessions do I have this week?"
-    ]
-    let bookingCreated = false
-    let actionTaken = false
+    let response = ''
 
-    // STEP 2: Handle BOOKING requests
-    if (extracted.intent === 'book' && extracted.confidence >= 50) {
-      console.log('🎯 BOOKING REQUEST DETECTED')
-      
-      try {
+    // Handle different intents
+    switch (extracted.intent) {
+      case 'book': {
+        console.log('📝 HANDLING BOOKING INTENT')
         const defaults = await applySmartDefaults(extracted)
-        console.log('🎛️ DEFAULTS APPLIED:', defaults)
-        
         const result = await executeBooking(extracted, defaults)
-        console.log('📥 BOOKING RESULT:', result)
         
-        if (result.success) {
-          // Trigger immediate calendar refresh for real-time sync
-          console.log('🔄 BOOKING CREATED - TRIGGERING CALENDAR REFRESH')
+        if (result.success && result.booking) {
+          const startTime = new Date(result.booking.startTime)
+          const endTime = new Date(result.booking.endTime)
           
-          const startDate = new Date(result.booking.startTime)
-          const endDate = new Date(result.booking.endTime)
-          
-          response = `Perfect! I've booked your ${result.booking.title} for ${startDate.toDateString()} from ${startDate.toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit', 
-            hour12: true 
-          })} to ${endDate.toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit', 
-            hour12: true 
-          })}. The booking is confirmed!`
-          
-          bookingCreated = true
-          actionTaken = true
-          suggestions = [
-            "Show me my updated calendar",
-            "Book another session this week",
-            "Schedule a follow-up meeting",
-            "What's my availability tomorrow?"
-          ]
+          response = `
+            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 20px; border-radius: 12px; margin: 16px 0;">
+              <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 24px; margin-right: 12px;">✅</span>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Booking Confirmed!</h3>
+              </div>
+              <div style="background: rgba(255,255,255,0.1); padding: 16px; border-radius: 8px;">
+                <p style="margin: 0 0 8px 0;"><strong>📚 Session:</strong> ${result.booking.title}</p>
+                <p style="margin: 0 0 8px 0;"><strong>📅 Date:</strong> ${startTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p style="margin: 0 0 8px 0;"><strong>⏰ Time:</strong> ${startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} - ${endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</p>
+                <p style="margin: 0 0 8px 0;"><strong>🏷️ Category:</strong> ${result.booking.category}</p>
+                <p style="margin: 0;"><strong>👤 Client:</strong> ${result.booking.clientName}</p>
+              </div>
+            </div>
+          `
         } else {
-          response = `I wasn't able to create that booking. ${result.error || 'Please try with different details.'}`
-          suggestions = [
-            "Try a different time slot",
-            "Book for tomorrow instead",
-            "Show me my calendar first",
-            "Schedule for next week"
-          ]
+          response = `
+            <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 20px; border-radius: 12px; margin: 16px 0;">
+              <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 24px; margin-right: 12px;">❌</span>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Booking Failed</h3>
+              </div>
+              <p style="margin: 0;">${result.error || 'Unable to create booking. Please try again.'}</p>
+            </div>
+          `
         }
-      } catch (error) {
-        console.error('Booking error:', error)
-        response = "I encountered an error while trying to book that session. Please try again."
+        break
       }
-    }
-    
-    // STEP 2.5: Handle DELETE requests - Following same pattern as BOOKING
-    else if (extracted.intent === 'delete' && extracted.confidence >= 50) {
-      console.log('🗑️ DELETE REQUEST DETECTED')
-      
-      try {
-        const result = await executeDelete(extracted)
-        console.log('📥 DELETE RESULT:', result)
+
+      case 'query': {
+        console.log('🔍 HANDLING QUERY INTENT')
         
-        if (result.success) {
-          if (result.deletedCount > 0) {
-            // Trigger immediate calendar refresh for real-time sync
-            console.log('🔄 BOOKINGS DELETED - TRIGGERING CALENDAR REFRESH')
-            
-            const dateText = extracted.date ? extracted.date.toDateString() : 'the specified date'
-            response = `Successfully deleted ${result.deletedCount} session${result.deletedCount > 1 ? 's' : ''} from ${dateText}. Your calendar has been updated!`
-            
-            // List the deleted sessions for confirmation
-            if (result.deletedBookings && result.deletedBookings.length > 0) {
-              const deletedTitles = result.deletedBookings.map(booking => booking.title).join(', ')
-              response += `\n\nDeleted sessions: ${deletedTitles}`
-            }
-          } else {
-            const dateText = extracted.date ? extracted.date.toDateString() : 'the specified date'
-            response = `No sessions found to delete on ${dateText}. Your calendar is already clear for that date.`
-          }
-          
-          actionTaken = true
-          suggestions = [
-            "Show me my updated calendar",
-            "Book a new session",
-            "Check my availability",
-            "View next week's schedule"
-          ]
-        } else {
-          response = `I wasn't able to delete those sessions. ${result.error || 'Please try again.'}`
-          suggestions = [
-            "Show me my calendar first",
-            "Try specifying a date",
-            "Cancel a specific session",
-            "Clear a different date"
-          ]
-        }
-      } catch (error) {
-        console.error('Delete error:', error)
-        response = "I encountered an error while trying to delete those sessions. Please try again."
-      }
-    }
-    
-    // STEP 2.75: Handle UPDATE requests - Following same pattern as DELETE and BOOKING
-    else if (extracted.intent === 'update' && extracted.confidence >= 50) {
-      console.log('✏️ UPDATE REQUEST DETECTED')
-      
-      try {
-        const result = await executeUpdate(extracted)
-        console.log('📥 UPDATE RESULT:', result)
-        
-        if (result.success) {
-          // Trigger immediate calendar refresh for real-time sync
-          console.log('🔄 BOOKING UPDATED - TRIGGERING CALENDAR REFRESH')
-          
-          const updatedDate = new Date(result.updatedBooking.startTime)
-          const updatedEndDate = new Date(result.updatedBooking.endTime)
-          const originalDate = new Date(result.originalBooking.startTime)
-          
-          response = `Perfect! I've updated your "${result.updatedBooking.title}" session from ${originalDate.toDateString()} to ${updatedDate.toDateString()} at ${updatedDate.toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit', 
-            hour12: true 
-          })} - ${updatedEndDate.toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
-            minute: '2-digit', 
-            hour12: true 
-          })}. The update is confirmed!`
-          
-          actionTaken = true
-          suggestions = [
-            "Show me my updated calendar",
-            "Make another change",
-            "Book a new session",
-            "Check my availability"
-          ]
-        } else {
-          response = `I wasn't able to update that session. ${result.error || 'Please try again with different details.'}`
-          suggestions = [
-            "Show me my calendar first",
-            "Try a different time",
-            "Specify the date to update",
-            "Book a new session instead"
-          ]
-        }
-      } catch (error) {
-        console.error('Update error:', error)
-        response = "I encountered an error while trying to update that session. Please try again."
-      }
-    }
-    
-    // STEP 3: Handle QUERY requests
-    else if (extracted.intent === 'query' && extracted.confidence >= 50) {
-      console.log('🔍 QUERY REQUEST DETECTED')
-      
-      try {
         let bookings: any[] = []
-        let dateRangeText = ''
+        let dateRange = ''
         
         if (extracted.date) {
+          // Query for specific date
           const startOfDay = new Date(extracted.date)
           startOfDay.setHours(0, 0, 0, 0)
           const endOfDay = new Date(extracted.date)
           endOfDay.setHours(23, 59, 59, 999)
           
           bookings = await getBookingsForDateRange(startOfDay, endOfDay)
-          dateRangeText = extracted.date.toDateString()
+          dateRange = extracted.date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
         } else {
-          // Default to showing next 7 days
-          const startDate = new Date(CURRENT_DATE)
-          const endDate = new Date(CURRENT_DATE)
-          endDate.setDate(endDate.getDate() + 7)
+          // Query for current month
+          const now = new Date(CURRENT_DATE)
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+          const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
           
-          bookings = await getBookingsForDateRange(startDate, endDate)
-          dateRangeText = 'the next 7 days'
+          bookings = await getBookingsForDateRange(startOfMonth, endOfMonth)
+          dateRange = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
         }
         
-        console.log(`Found ${bookings.length} bookings`)
+        const table = generateBookingsTable(bookings, dateRange)
         
-        if (bookings.length > 0) {
-          const htmlTable = generateBookingsTable(bookings, dateRangeText)
-          response = `Here are your scheduled sessions for ${dateRangeText}:\n\n${htmlTable}`
-          
-          suggestions = [
-            "Book another session",
-            "Show me next week's calendar",
-            "Schedule a meeting for tomorrow",
-            "Check my availability"
-          ]
+        response = `
+          <div style="margin: 16px 0;">
+            <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; padding: 16px; border-radius: 12px 12px 0 0;">
+              <div style="display: flex; align-items: center;">
+                <span style="font-size: 20px; margin-right: 12px;">📊</span>
+                <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Your Schedule${dateRange ? ` - ${dateRange}` : ''}</h3>
+              </div>
+            </div>
+            ${table}
+          </div>
+        `
+        break
+      }
+
+      case 'delete': {
+        console.log('🗑️ HANDLING DELETE INTENT')
+        const result = await executeDelete(extracted)
+        
+        if (result.success) {
+          if (result.deletedCount > 0) {
+            const deletedList = result.deletedBookings?.map(booking => 
+              `<li style="margin: 4px 0;">📚 ${booking.title} - ${new Date(booking.startTime).toLocaleDateString()}</li>`
+            ).join('') || ''
+            
+            response = `
+              <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; padding: 20px; border-radius: 12px; margin: 16px 0;">
+                <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                  <span style="font-size: 24px; margin-right: 12px;">🗑️</span>
+                  <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Bookings Deleted</h3>
+                </div>
+                <p style="margin: 0 0 12px 0;">Successfully deleted ${result.deletedCount} booking(s):</p>
+                <ul style="margin: 0; padding-left: 20px;">
+                  ${deletedList}
+                </ul>
+              </div>
+            `
+          } else {
+            response = `
+              <div style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); color: white; padding: 20px; border-radius: 12px; margin: 16px 0;">
+                <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                  <span style="font-size: 24px; margin-right: 12px;">ℹ️</span>
+                  <h3 style="margin: 0; font-size: 18px; font-weight: 700;">No Bookings Found</h3>
+                </div>
+                <p style="margin: 0;">${result.error || 'No bookings found to delete for the specified date.'}</p>
+              </div>
+            `
+          }
         } else {
-          response = `You don't have any sessions scheduled for ${dateRangeText}. Would you like to book something?`
-          
-          suggestions = [
-            "Book a training session tomorrow",
-            "Schedule a meeting for this week",
-            "Set up a consultation call",
-            "Plan a team workshop"
-          ]
+          response = `
+            <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 20px; border-radius: 12px; margin: 16px 0;">
+              <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 24px; margin-right: 12px;">❌</span>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Delete Failed</h3>
+              </div>
+              <p style="margin: 0;">${result.error || 'Unable to delete bookings. Please try again.'}</p>
+            </div>
+          `
         }
+        break
+      }
+
+      case 'update': {
+        console.log('✏️ HANDLING UPDATE INTENT')
+        const result = await executeUpdate(extracted)
         
-        actionTaken = true
-      } catch (error) {
-        console.error('Query error:', error)
-        response = "I encountered an error while retrieving your calendar. Please try again."
+        if (result.success && result.updatedBooking) {
+          const startTime = new Date(result.updatedBooking.startTime)
+          const endTime = new Date(result.updatedBooking.endTime)
+          
+          response = `
+            <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white; padding: 20px; border-radius: 12px; margin: 16px 0;">
+              <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 24px; margin-right: 12px;">✏️</span>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Booking Updated!</h3>
+              </div>
+              <div style="background: rgba(255,255,255,0.1); padding: 16px; border-radius: 8px;">
+                <p style="margin: 0 0 8px 0;"><strong>📚 Session:</strong> ${result.updatedBooking.title}</p>
+                <p style="margin: 0 0 8px 0;"><strong>📅 Date:</strong> ${startTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p style="margin: 0 0 8px 0;"><strong>⏰ New Time:</strong> ${startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} - ${endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</p>
+                <p style="margin: 0 0 8px 0;"><strong>🏷️ Category:</strong> ${result.updatedBooking.category}</p>
+                <p style="margin: 0;"><strong>👤 Client:</strong> ${result.updatedBooking.clientName}</p>
+              </div>
+            </div>
+          `
+        } else {
+          response = `
+            <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 20px; border-radius: 12px; margin: 16px 0;">
+              <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                <span style="font-size: 24px; margin-right: 12px;">❌</span>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Update Failed</h3>
+              </div>
+              <p style="margin: 0;">${result.error || 'Unable to update booking. Please try again.'}</p>
+            </div>
+          `
+        }
+        break
+      }
+
+      default: {
+        console.log('💬 HANDLING GENERAL INTENT')
+        response = `
+          <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; padding: 20px; border-radius: 12px; margin: 16px 0;">
+            <div style="display: flex; align-items: center; margin-bottom: 12px;">
+              <span style="font-size: 24px; margin-right: 12px;">🤖</span>
+              <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Schedula AI Assistant</h3>
+            </div>
+            <p style="margin: 0 0 12px 0;">I can help you manage your calendar! Here's what I can do:</p>
+            <ul style="margin: 0; padding-left: 20px;">
+              <li style="margin: 4px 0;">📅 <strong>Book sessions:</strong> "Book a training session tomorrow at 2 PM"</li>
+              <li style="margin: 4px 0;">🔍 <strong>View schedule:</strong> "Show me my bookings for today"</li>
+              <li style="margin: 4px 0;">✏️ <strong>Update bookings:</strong> "Change tomorrow's session to 3 PM"</li>
+              <li style="margin: 4px 0;">🗑️ <strong>Delete bookings:</strong> "Cancel my session on July 10"</li>
+            </ul>
+          </div>
+        `
+        break
       }
     }
+
+    console.log('📤 SENDING RESPONSE')
+    console.log('🔶 =============== CHAT API SUCCESS ===============')
     
-    // STEP 4: Handle general/unclear requests
-    else {
-      response = "I'm Schedula, your AI scheduling assistant! I can help you book training sessions and view your calendar. What would you like to do?"
-      suggestions = [
-        "Book a training session tomorrow at 2 PM",
-        "Show me my calendar for July 12",
-        "Schedule a meeting for today",
-        "What sessions do I have this week?"
-      ]
-    }
-
-    // STEP 5: Save conversation to database
-    try {
-      await prisma.chatConversation.create({
-        data: {
-          message,
-          response,
-        },
-      })
-    } catch (dbError) {
-      console.error('Error saving chat conversation:', dbError)
-    }
-
-    // STEP 6: Return response
-    console.log('📤 RESPONSE:', response)
-    console.log('🏁 ============= CHAT API END =============')
-    
-    return NextResponse.json({
-      response,
-      suggestions,
-      bookingCreated,
-      actionTaken,
-      conversationState: 'active'
-    })
-
+    return NextResponse.json({ response })
   } catch (error) {
-    console.error('Error in chat API:', error)
-    
-    return NextResponse.json({
-      response: "Hello! I'm Schedula, your intelligent scheduling assistant. I can help you book training sessions and view your calendar. What would you like to do?",
-      suggestions: [
-        "Book a training session tomorrow at 2 PM",
-        "Show me my calendar for July 12",
-        "Schedule a meeting for today",
-        "What sessions do I have this week?"
-      ],
-      actionTaken: false,
-      bookingCreated: false,
-      conversationState: 'initial'
-    })
+    console.error('❌ CHAT API ERROR:', error)
+    return NextResponse.json(
+      { 
+        response: `
+          <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; padding: 20px; border-radius: 12px; margin: 16px 0;">
+            <div style="display: flex; align-items: center; margin-bottom: 12px;">
+              <span style="font-size: 24px; margin-right: 12px;">⚠️</span>
+              <h3 style="margin: 0; font-size: 18px; font-weight: 700;">System Error</h3>
+            </div>
+            <p style="margin: 0;">I encountered an error processing your request. Please try again.</p>
+          </div>
+        `
+      },
+      { status: 500 }
+    )
   }
 }
-
-

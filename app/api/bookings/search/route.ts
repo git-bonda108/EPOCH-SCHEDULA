@@ -2,56 +2,43 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/db'
 
-const prisma = new PrismaClient()
-
-// Search bookings with semantic matching
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url)
     const query = searchParams.get('q')
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
+    const date = searchParams.get('date')
+    const category = searchParams.get('category')
 
-    if (!query) {
-      return NextResponse.json(
-        { message: 'Query parameter is required' },
-        { status: 400 }
-      )
-    }
+    let whereClause: any = {}
 
-    // Build where clause for semantic search
-    const whereClause: any = {
-      OR: [
+    // Add search query filter
+    if (query) {
+      whereClause.OR = [
         { title: { contains: query, mode: 'insensitive' } },
         { description: { contains: query, mode: 'insensitive' } },
-        { category: { contains: query, mode: 'insensitive' } },
         { clientName: { contains: query, mode: 'insensitive' } },
       ]
     }
 
-    // Add date range if provided
-    if (startDate && endDate) {
-      whereClause.AND = {
-        startTime: {
-          gte: new Date(startDate),
-          lte: new Date(endDate),
-        }
+    // Add date filter
+    if (date) {
+      const searchDate = new Date(date)
+      const startOfDay = new Date(searchDate)
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(searchDate)
+      endOfDay.setHours(23, 59, 59, 999)
+
+      whereClause.startTime = {
+        gte: startOfDay,
+        lte: endOfDay,
       }
     }
 
-    // Enhanced semantic matching - split query into keywords
-    const keywords = query.toLowerCase().split(' ').filter(word => word.length > 2)
-    if (keywords.length > 0) {
-      // Add additional OR conditions for each keyword
-      keywords.forEach(keyword => {
-        whereClause.OR.push(
-          { title: { contains: keyword, mode: 'insensitive' } },
-          { description: { contains: keyword, mode: 'insensitive' } },
-          { category: { contains: keyword, mode: 'insensitive' } }
-        )
-      })
+    // Add category filter
+    if (category) {
+      whereClause.category = category
     }
 
     const bookings = await prisma.booking.findMany({
@@ -72,36 +59,6 @@ export async function GET(request: NextRequest) {
     console.error('Error searching bookings:', error)
     return NextResponse.json(
       { message: 'Failed to search bookings' },
-      { status: 500 }
-    )
-  }
-}
-
-// Get all unique categories for filtering
-export async function POST(request: NextRequest) {
-  try {
-    const categories = await prisma.booking.findMany({
-      select: {
-        category: true,
-      },
-      distinct: ['category'],
-      where: {
-        category: {
-          not: null,
-        },
-      },
-    })
-
-    const uniqueCategories = categories
-      .map((item: any) => item.category)
-      .filter(Boolean)
-      .sort()
-
-    return NextResponse.json(uniqueCategories)
-  } catch (error) {
-    console.error('Error fetching categories:', error)
-    return NextResponse.json(
-      { message: 'Failed to fetch categories' },
       { status: 500 }
     )
   }

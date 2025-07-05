@@ -2,10 +2,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
-
-const prisma = new PrismaClient()
+import { prisma } from '@/lib/db'
 
 const bookingSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -18,7 +16,7 @@ const bookingSchema = z.object({
 })
 
 // Get bookings for a specific month
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url)
     const month = searchParams.get('month')
@@ -61,9 +59,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Create a new booking
 // Update an existing booking
-export async function PUT(request: NextRequest) {
+export async function PUT(request: NextRequest): Promise<NextResponse> {
   try {
     const body = await request.json()
     const { id, ...updateData } = body
@@ -151,7 +148,7 @@ export async function PUT(request: NextRequest) {
 }
 
 // Delete a booking
-export async function DELETE(request: NextRequest) {
+export async function DELETE(request: NextRequest): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -180,7 +177,7 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     console.log('🔶 =============== BOOKING API POST REQUEST ===============')
     const body = await request.json()

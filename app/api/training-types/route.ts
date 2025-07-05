@@ -2,56 +2,36 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
 
-const prisma = new PrismaClient()
+const trainingTypes = [
+  { id: 1, name: 'Azure Fundamentals', category: 'Azure', duration: 60 },
+  { id: 2, name: 'Python Basics', category: 'Python', duration: 90 },
+  { id: 3, name: 'Advanced Python', category: 'Python', duration: 120 },
+  { id: 4, name: 'Azure DevOps', category: 'Azure', duration: 90 },
+  { id: 5, name: 'Data Science with Python', category: 'Python', duration: 120 },
+  { id: 6, name: 'Azure AI Services', category: 'Azure', duration: 90 },
+  { id: 7, name: 'Web Development', category: 'General', duration: 120 },
+  { id: 8, name: 'Database Management', category: 'General', duration: 90 },
+]
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    // Return common booking categories instead of database training types
-    const categories = [
-      {
-        id: '1',
-        name: 'Meeting',
-        description: 'General business meetings and discussions',
-        category: 'Business',
-        duration: 60
-      },
-      {
-        id: '2', 
-        name: 'Training',
-        description: 'Professional development and learning sessions',
-        category: 'Education',
-        duration: 120
-      },
-      {
-        id: '3',
-        name: 'Consultation',
-        description: 'Client consultations and advice sessions', 
-        category: 'Service',
-        duration: 60
-      },
-      {
-        id: '4',
-        name: 'Workshop',
-        description: 'Interactive learning and skill development',
-        category: 'Education', 
-        duration: 180
-      },
-      {
-        id: '5',
-        name: 'Review',
-        description: 'Performance reviews and feedback sessions',
-        category: 'Business',
-        duration: 90
-      }
-    ]
+    const { searchParams } = new URL(request.url)
+    const category = searchParams.get('category')
 
-    return NextResponse.json(categories)
+    let filteredTypes = trainingTypes
+
+    if (category) {
+      filteredTypes = trainingTypes.filter(
+        type => type.category.toLowerCase() === category.toLowerCase()
+      )
+    }
+
+    return NextResponse.json(filteredTypes)
   } catch (error) {
-    console.error('Error fetching categories:', error)
+    console.error('Error fetching training types:', error)
     return NextResponse.json(
-      { message: 'Failed to fetch categories' },
+      { message: 'Failed to fetch training types' },
       { status: 500 }
     )
   }
