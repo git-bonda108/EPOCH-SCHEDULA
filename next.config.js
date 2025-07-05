@@ -1,43 +1,25 @@
-const path = require('path');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  distDir: process.env.NEXT_DIST_DIR || '.next',
-  output: process.env.NEXT_OUTPUT_MODE || 'standalone',
-  outputFileTracingRoot: path.join(__dirname, './'),
-  outputFileTracingIncludes: {
-    '/': ['./public/**/*'],
-  },
+  output: 'standalone',
   experimental: {
+    serverComponentsExternalPackages: ['@prisma/client', 'prisma']
   },
-  eslint: {
-    ignoreDuringBuilds: true,
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals.push('@prisma/client')
+    }
+    return config
+  },
+  env: {
+    DATABASE_URL: process.env.DATABASE_URL,
   },
   typescript: {
     ignoreBuildErrors: false,
   },
-  images: { unoptimized: true },
-  async headers() {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'Access-Control-Allow-Origin',
-            value: '*',
-          },
-          {
-            key: 'Access-Control-Allow-Methods',
-            value: 'GET, POST, PUT, DELETE, OPTIONS',
-          },
-          {
-            key: 'Access-Control-Allow-Headers',
-            value: 'Content-Type, Authorization',
-          },
-        ],
-      },
-    ];
+  eslint: {
+    ignoreDuringBuilds: false,
   },
-};
+}
 
-module.exports = nextConfig;
+module.exports = nextConfig
