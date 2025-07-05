@@ -376,32 +376,67 @@ async function executeBooking(extracted: ExtractedInfo, defaults: any): Promise<
 
     console.log('📝 CREATING BOOKING WITH DATA:', requestBody)
 
-    // Call the booking API
-    const apiUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/bookings`
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody)
-    })
+    // Create booking directly in database (no HTTP call needed)
+    console.log('🔄 CREATING BOOKING DIRECTLY IN DATABASE...')
+    
+    const startTime = new Date(requestBody.startTime)
+    const endTime = new Date(requestBody.endTime)
 
-    if (response.ok) {
-      const booking = await response.json()
-      console.log('🎉 BOOKING SUCCESSFULLY CREATED:', booking.id)
-      
-      return {
-        success: true,
-        booking
-      }
-    } else {
-      const errorText = await response.text()
-      console.log('❌ BOOKING API ERROR:', errorText)
-      
+    // Validate that end time is after start time
+    if (endTime <= startTime) {
       return {
         success: false,
-        error: 'Failed to create booking'
+        error: 'End time must be after start time'
       }
+    }
+
+    // Check for conflicts
+    const conflictingBookings = await prisma.booking.findMany({
+      where: {
+        AND: [
+          {
+            startTime: {
+              lt: endTime,
+            },
+          },
+          {
+            endTime: {
+              gt: startTime,
+            },
+          },
+        ],
+      },
+    })
+
+    if (conflictingBookings.length > 0) {
+      return {
+        success: false,
+        error: 'Time slot conflicts with existing booking'
+      }
+    }
+
+    const booking = await prisma.booking.create({
+      data: {
+        title: requestBody.title,
+        description: requestBody.description,
+        category: requestBody.category,
+        startTime,
+        endTime,
+        clientName: requestBody.clientName || null,
+      },
+    })
+
+    // Convert BigInt to string for JSON serialization
+    const serializedBooking = {
+      ...booking,
+      id: booking.id.toString(),
+    }
+
+    console.log('🎉 BOOKING SUCCESSFULLY CREATED:', serializedBooking.id)
+    
+    return {
+      success: true,
+      booking: serializedBooking
     }
   } catch (error) {
     console.error('❌ BOOKING EXECUTION ERROR:', error)
@@ -464,8 +499,7 @@ async function executeDelete(extracted: ExtractedInfo): Promise<{
       }
     }
 
-    // Delete each booking using the booking API
-    const apiUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/bookings`
+    // Delete each booking directly from database (no HTTP call needed)
     let deletedCount = 0
     let deletedBookings: any[] = []
 
@@ -473,21 +507,13 @@ async function executeDelete(extracted: ExtractedInfo): Promise<{
       try {
         console.log(`🗑️ Deleting booking: ${booking.id} - ${booking.title}`)
         
-        const response = await fetch(`${apiUrl}?id=${booking.id}`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          }
+        await prisma.booking.delete({
+          where: { id: booking.id },
         })
 
-        if (response.ok) {
-          deletedCount++
-          deletedBookings.push(booking)
-          console.log(`✅ Successfully deleted booking: ${booking.id}`)
-        } else {
-          const errorText = await response.text()
-          console.log(`❌ Failed to delete booking ${booking.id}: ${errorText}`)
-        }
+        deletedCount++
+        deletedBookings.push(booking)
+        console.log(`✅ Successfully deleted booking: ${booking.id}`)
       } catch (deleteError) {
         console.error(`❌ Error deleting booking ${booking.id}:`, deleteError)
       }
@@ -603,33 +629,70 @@ async function executeUpdate(extracted: ExtractedInfo): Promise<{
 
     console.log('📝 UPDATING BOOKING WITH DATA:', updateData)
 
-    // Call the booking API for update
-    const apiUrl = `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/bookings`
-    const response = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updateData)
-    })
+    // Update booking directly in database (no HTTP call needed)
+    console.log('🔄 UPDATING BOOKING DIRECTLY IN DATABASE...')
+    
+    const startTime = new Date(updateData.startTime)
+    const endTime = new Date(updateData.endTime)
 
-    if (response.ok) {
-      const updatedBooking = await response.json()
-      console.log('🎉 BOOKING SUCCESSFULLY UPDATED:', updatedBooking.id)
-      
-      return {
-        success: true,
-        updatedBooking,
-        originalBooking: bookingToUpdate
-      }
-    } else {
-      const errorText = await response.text()
-      console.log('❌ UPDATE API ERROR:', errorText)
-      
+    // Validate that end time is after start time
+    if (endTime <= startTime) {
       return {
         success: false,
-        error: 'Failed to update booking'
+        error: 'End time must be after start time'
       }
+    }
+
+    // Check for conflicts (excluding the current booking)
+    const conflictingBookings = await prisma.booking.findMany({
+      where: {
+        AND: [
+          { id: { not: updateData.id } },
+          {
+            startTime: {
+              lt: endTime,
+            },
+          },
+          {
+            endTime: {
+              gt: startTime,
+            },
+          },
+        ],
+      },
+    })
+
+    if (conflictingBookings.length > 0) {
+      return {
+        success: false,
+        error: 'Time slot conflicts with existing booking'
+      }
+    }
+
+    const updatedBooking = await prisma.booking.update({
+      where: { id: updateData.id },
+      data: {
+        title: updateData.title,
+        description: updateData.description,
+        category: updateData.category,
+        startTime,
+        endTime,
+        clientName: updateData.clientName || null,
+      },
+    })
+
+    // Convert BigInt to string for JSON serialization
+    const serializedBooking = {
+      ...updatedBooking,
+      id: updatedBooking.id.toString(),
+    }
+
+    console.log('🎉 BOOKING SUCCESSFULLY UPDATED:', serializedBooking.id)
+    
+    return {
+      success: true,
+      updatedBooking: serializedBooking,
+      originalBooking: bookingToUpdate
     }
   } catch (error) {
     console.error('❌ UPDATE EXECUTION ERROR:', error)
