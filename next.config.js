@@ -2,9 +2,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  experimental: {
-    serverComponentsExternalPackages: ['@prisma/client', 'prisma']
-  },
+  serverExternalPackages: ['@prisma/client', 'prisma'],
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals.push('@prisma/client')
