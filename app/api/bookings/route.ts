@@ -76,6 +76,19 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
     const startTime = new Date(validatedData.startTime)
     const endTime = new Date(validatedData.endTime)
 
+    // DATE VALIDATION: Update operations only allowed for current date and future dates
+    const today = new Date()
+    today.setHours(0, 0, 0, 0) // Set to start of today
+    const bookingDate = new Date(startTime)
+    bookingDate.setHours(0, 0, 0, 0) // Set to start of booking date
+    
+    if (bookingDate < today) {
+      return NextResponse.json(
+        { message: 'Cannot update bookings for past dates. Updates are only allowed for current and future dates.' },
+        { status: 400 }
+      )
+    }
+
     // Validate that end time is after start time
     if (endTime <= startTime) {
       return NextResponse.json(
@@ -159,6 +172,9 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
         { status: 400 }
       )
     }
+
+    // DATE VALIDATION: Delete operations allowed for ALL dates (past, current, future)
+    // No date restrictions for delete operations
 
     await prisma.booking.delete({
       where: { id },
