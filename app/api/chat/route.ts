@@ -159,23 +159,51 @@ function extractInformationFromMessage(message: string): ExtractedInfo {
     confidence += 25
   }
   
-  // Handle specific dates like "July 12", "12-Jul"
+  // ENHANCED DATE PARSING - Support all required formats: "Jul 13th", "13-Jul", "07/13", "13jul"
   if (!date) {
-    const datePatterns = [
+    const enhancedDatePatterns = [
+      // Format: "Jul 13th", "July 13th"
+      /(?:july|jul)\s+(\d{1,2})(?:st|nd|rd|th)?/i,
+      
+      // Format: "13-Jul", "13-July"
+      /(\d{1,2})-(?:july|jul)/i,
+      
+      // Format: "07/13" (MM/DD for July)
+      /07\/(\d{1,2})/i,
+      
+      // Format: "13jul", "13july" (no spaces/punctuation)
+      /(\d{1,2})(?:july|jul)(?!\w)/i,
+      
+      // Existing patterns for backward compatibility
       /(\d{1,2})[-\/](?:july|jul)/i,
-      /(?:july|jul)\s+(\d{1,2})/i
+      /(?:july|jul)\s+(\d{1,2})/i,
+      /(\d{1,2})\s+(?:july|jul)/i
     ]
     
-    for (const pattern of datePatterns) {
+    console.log('🔍 Testing enhanced date patterns...')
+    
+    for (let i = 0; i < enhancedDatePatterns.length; i++) {
+      const pattern = enhancedDatePatterns[i]
+      console.log(`   Pattern ${i + 1}: ${pattern}`)
       const match = message.match(pattern)
+      console.log(`   Match result:`, match)
+      
       if (match) {
         const day = parseInt(match[1])
-        const year = CURRENT_DATE.getFullYear()
-        date = new Date(year, 6, day) // July (0-indexed)
+        const month = 6 // July (0-indexed)
+        const year = message.includes('2025') ? 2025 : CURRENT_DATE.getFullYear()
+        
+        console.log(`   Extracted day: ${day}, month: ${month}, year: ${year}`)
+        
+        date = new Date(year, month, day)
         confidence += 25
-        console.log(`📅 Date parsed: ${date.toDateString()}`)
+        console.log(`📅 Enhanced date parsed: ${date.toDateString()}`)
         break
       }
+    }
+    
+    if (!date) {
+      console.log('❌ No enhanced date patterns matched!')
     }
   }
 
