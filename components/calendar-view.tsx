@@ -20,7 +20,7 @@ interface Booking {
 }
 
 export const CalendarView = forwardRef<{ refreshBookings: () => void }, {}>((props, ref) => {
-  const [currentDate, setCurrentDate] = useState(new Date('2025-07-05'))
+  const [currentDate, setCurrentDate] = useState(new Date())
   const [bookings, setBookings] = useState<Booking[]>([])
   const [isTrainingDetailsOpen, setIsTrainingDetailsOpen] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
