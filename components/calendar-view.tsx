@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TrainingDetailsDialog } from './training-details-dialog'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns'
 
 interface Booking {
   id: string
@@ -28,7 +28,14 @@ export const CalendarView = forwardRef<{ refreshBookings: () => void }, {}>((pro
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
-  const calendarDays = eachDayOfInterval({ start: monthStart, end: monthEnd })
+  
+  // Get the start of the week for the first day of the month
+  // This ensures we have empty cells at the beginning if needed
+  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 }) // Sunday = 0
+  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 })
+  
+  // Generate all days in the calendar grid (including empty cells)
+  const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
 
   useEffect(() => {
     fetchBookings()
